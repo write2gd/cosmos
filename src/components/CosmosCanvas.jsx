@@ -22,6 +22,9 @@ function cubicEaseInOut(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+// Galactic Center Offset — positioned so Sun at (0,0,0) lies inside the outer Orion arm
+const GALACTIC_CENTER = new THREE.Vector3(600, 20, 400);
+
 export default function CosmosCanvas({
   selectedBodyId,
   onSelectBody,
@@ -90,8 +93,10 @@ export default function CosmosCanvas({
     let offsetDist = 25;
 
     if (targetId === 'milkyway') {
-      targetWorldPos.set(0, -50, 0);
-      offsetDist = 450;
+      // Focus on Galactic Center Sagittarius A*
+      const gScale = isRealisticScaleRef.current ? 30 : 1;
+      targetWorldPos.copy(GALACTIC_CENTER).multiplyScalar(gScale);
+      offsetDist = 3800 * gScale; // Pull back far enough to view the entire galaxy with Solar System inside arm
     } else if (bodyMeshes[targetId]) {
       const selectedObj = bodyMeshes[targetId].mesh;
       selectedObj.getWorldPosition(targetWorldPos);
@@ -108,12 +113,11 @@ export default function CosmosCanvas({
     const startTargetPos = controls.target.clone();
 
     const dist = startCamPos.distanceTo(targetWorldPos);
-    const duration = Math.min(4.5, Math.max(2.8, dist * 0.015));
+    const duration = Math.min(5.0, Math.max(2.8, dist * 0.0015));
 
     const midCamPos = startCamPos.clone().add(targetWorldPos).multiplyScalar(0.5);
-    const arcHeight = Math.min(120, dist * 0.25);
+    const arcHeight = Math.min(500, dist * 0.25);
     midCamPos.y += arcHeight;
-    midCamPos.z += arcHeight * 0.5;
 
     flightStateRef.current = {
       isAnimating: true,
@@ -136,9 +140,9 @@ export default function CosmosCanvas({
     // 1. SCENE & CAMERA
     const scene = new THREE.Scene();
     sceneRef.current = scene;
-    scene.fog = new THREE.FogExp2(0x030308, 0.0002);
+    scene.fog = new THREE.FogExp2(0x030308, 0.00008);
 
-    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 5000);
+    const camera = new THREE.PerspectiveCamera(45, width / height, 0.1, 20000);
     cameraRef.current = camera;
 
     const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
@@ -156,7 +160,7 @@ export default function CosmosCanvas({
     controlsRef.current = controls;
     controls.enableDamping = true;
     controls.dampingFactor = 0.04;
-    controls.maxDistance = 2200;
+    controls.maxDistance = 15000;
     controls.minDistance = 1.2;
 
     // 3. LIGHTING
@@ -184,8 +188,17 @@ export default function CosmosCanvas({
       pluto: createPlutoTexture()
     };
 
-    // 5. MILKY WAY GALAXY & STARFIELD PARTICLES
-    createStarfieldAndGalaxy(scene);
+    // 5. DEEP SPACE STARFIELD & EMBEDDED MILKY WAY GALAXY
+    createStarfield(scene);
+    const galaxyGroup = createMilkyWayGalaxy(scene);
+
+    // Scale galaxy so it always dwarfs the solar system in both scale modes
+    if (isRealisticScale) {
+      const galaxyScale = 30;
+      galaxyGroup.scale.setScalar(galaxyScale);
+      // Shift center so the Sun at (0,0,0) still sits inside the Orion arm
+      galaxyGroup.position.copy(GALACTIC_CENTER).multiplyScalar(galaxyScale);
+    }
 
     // 6. BUILD CELESTIAL BODIES
     const bodyMeshes = {};
@@ -332,7 +345,7 @@ export default function CosmosCanvas({
       camera.position.set(worldPos.x + 8, worldPos.y + 4, worldPos.z + 14);
     }
 
-    // 8. RAYCASTER CLICK & HOVER LISTENERS
+    // 8. RAYCASTER LISTENERS
     const raycaster = new THREE.Raycaster();
     const mouse = new THREE.Vector2();
 
@@ -388,7 +401,7 @@ export default function CosmosCanvas({
     renderer.domElement.addEventListener('pointermove', handlePointerMove);
     renderer.domElement.addEventListener('pointerdown', handlePointerDown);
 
-    // 9. ANIMATION LOOP WITH CINEMATIC FLIGHT
+    // 9. ANIMATION LOOP WITH CINEMATIC FLIGHT & GALAXY ROTATION
     let animationFrameId;
     let clock = new THREE.Clock();
 
@@ -399,6 +412,12 @@ export default function CosmosCanvas({
       const currentSelectedId = selectedBodyIdRef.current;
       const flightState = flightStateRef.current;
 
+      // Slow majestic galaxy rotation around its core Sagittarius A*
+      if (galaxyGroup) {
+        galaxyGroup.rotation.y += delta * 0.0015;
+      }
+
+      // Rotate planets
       Object.values(bodyMeshes).forEach(({ mesh, orbitGroup, pivot, bodyData }) => {
         mesh.rotation.y += bodyData.rotationSpeed * (currentSpeed > 0 ? currentSpeed * 0.5 : 1);
 
@@ -417,13 +436,15 @@ export default function CosmosCanvas({
         asteroidMesh.rotation.y += delta * 0.01 * (currentSpeed > 0 ? currentSpeed * 0.2 : 1);
       }
 
+      // Camera Flight interpolation
       if (currentSelectedId) {
         let targetWorldPos = new THREE.Vector3(0, 0, 0);
         let offsetDist = 25;
 
         if (currentSelectedId === 'milkyway') {
-          targetWorldPos.set(0, -50, 0);
-          offsetDist = 450;
+          const gScale = isRealisticScaleRef.current ? 30 : 1;
+          targetWorldPos.copy(GALACTIC_CENTER).multiplyScalar(gScale);
+          offsetDist = 3800 * gScale;
         } else if (bodyMeshes[currentSelectedId]) {
           const selectedObj = bodyMeshes[currentSelectedId].mesh;
           selectedObj.getWorldPosition(targetWorldPos);
@@ -444,7 +465,7 @@ export default function CosmosCanvas({
           controls.target.lerpVectors(flightState.startTargetPos, targetWorldPos, easedProgress);
 
           const finalCamOffset = camera.position.clone().sub(controls.target);
-          if (finalCamOffset.length() === 0) finalCamOffset.set(0, 4, 12);
+          if (finalCamOffset.length() === 0) finalCamOffset.set(0, 800, 1800);
           finalCamOffset.normalize().multiplyScalar(offsetDist);
           const endCamPos = targetWorldPos.clone().add(finalCamOffset);
 
@@ -518,7 +539,7 @@ export default function CosmosCanvas({
         }}
       />
 
-      {/* Dynamic Hover Tooltip Badge */}
+      {/* Hover Tooltip Badge */}
       {hoverInfo && (
         <div
           className="glass-panel"
@@ -549,16 +570,17 @@ export default function CosmosCanvas({
   );
 }
 
-function createStarfieldAndGalaxy(scene) {
-  const starCount = 10000;
+// 1. DEEP SPACE STARFIELD
+function createStarfield(scene) {
+  const starCount = 15000;
   const starGeo = new THREE.BufferGeometry();
   const starPos = new Float32Array(starCount * 3);
   const starColors = new Float32Array(starCount * 3);
 
-  const colors = [new THREE.Color(0xffffff), new THREE.Color(0x88bbff), new THREE.Color(0xffddaa)];
+  const colors = [new THREE.Color(0xffffff), new THREE.Color(0x88bbff), new THREE.Color(0xffddaa), new THREE.Color(0xffaacc)];
 
   for (let i = 0; i < starCount; i++) {
-    const r = 500 + Math.random() * 2000;
+    const r = 1500 + Math.random() * 9000;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
 
@@ -576,52 +598,181 @@ function createStarfieldAndGalaxy(scene) {
   starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
 
   const starMat = new THREE.PointsMaterial({
-    size: 2.0,
+    size: 2.2,
     vertexColors: true,
     transparent: true,
-    opacity: 0.9
+    opacity: 0.85
   });
   scene.add(new THREE.Points(starGeo, starMat));
+}
 
-  // Milky Way Spiral Galaxy
-  const galaxyCount = 12000;
-  const galaxyGeo = new THREE.BufferGeometry();
-  const galaxyPos = new Float32Array(galaxyCount * 3);
-  const galaxyColors = new Float32Array(galaxyCount * 3);
+// 2. MILKY WAY GALAXY (POSITIONED SO SOLAR SYSTEM AT (0,0,0) LIES INSIDE THE ORION SPIRAL ARM)
+function createMilkyWayGalaxy(scene) {
+  const galaxyGroup = new THREE.Group();
+  // Shift galactic center so the Sun at (0,0,0) lies inside the Orion arm at r ≈ 2160
+  galaxyGroup.position.copy(GALACTIC_CENTER);
+  galaxyGroup.rotation.x = Math.PI * 0.15; // Realistic tilted galaxy disc
 
-  const innerColor = new THREE.Color(0xffaa44);
-  const outerColor = new THREE.Color(0x3377ff);
+  // A. Sagittarius A* Black Hole Core
+  const coreGeo = new THREE.SphereGeometry(60, 32, 32);
+  const coreMat = new THREE.MeshBasicMaterial({ color: 0x000000 });
+  const coreMesh = new THREE.Mesh(coreGeo, coreMat);
 
-  for (let i = 0; i < galaxyCount; i++) {
-    const r = Math.random() * 700 + 100;
-    const arms = 4;
-    const armAngle = ((i % arms) * (Math.PI * 2)) / arms;
-    const spinAngle = r * 0.008;
-
-    const theta = armAngle + spinAngle + (Math.random() - 0.5) * 0.5;
-    const y = (Math.random() - 0.5) * (140 - r * 0.12);
-
-    galaxyPos[i * 3] = Math.cos(theta) * r;
-    galaxyPos[i * 3 + 1] = y - 200;
-    galaxyPos[i * 3 + 2] = Math.sin(theta) * r;
-
-    const mixedColor = innerColor.clone().lerp(outerColor, r / 800);
-    galaxyColors[i * 3] = mixedColor.r;
-    galaxyColors[i * 3 + 1] = mixedColor.g;
-    galaxyColors[i * 3 + 2] = mixedColor.b;
-  }
-
-  galaxyGeo.setAttribute('position', new THREE.BufferAttribute(galaxyPos, 3));
-  galaxyGeo.setAttribute('color', new THREE.BufferAttribute(galaxyColors, 3));
-
-  const galaxyMat = new THREE.PointsMaterial({
-    size: 2.4,
-    vertexColors: true,
+  // Accretion Disk
+  const accretionGeo = new THREE.RingGeometry(80, 240, 64);
+  const accretionMat = new THREE.MeshBasicMaterial({
+    color: 0xffaa22,
+    side: THREE.DoubleSide,
     transparent: true,
-    opacity: 0.65,
+    opacity: 0.85,
     blending: THREE.AdditiveBlending
   });
-  scene.add(new THREE.Points(galaxyGeo, galaxyMat));
+  const accretionRing = new THREE.Mesh(accretionGeo, accretionMat);
+  accretionRing.rotation.x = Math.PI / 2;
+  coreMesh.add(accretionRing);
+  galaxyGroup.add(coreMesh);
+
+  // B. Logarithmic 4-Arm Spiral Stars (120,000 particles — dense arms)
+  const starCount = 120000;
+  const starGeo = new THREE.BufferGeometry();
+  const starPos = new Float32Array(starCount * 3);
+  const starColors = new Float32Array(starCount * 3);
+
+  const innerColor = new THREE.Color(0xffeeaa);
+  const armColor = new THREE.Color(0x4499ff);
+  const outerColor = new THREE.Color(0x9944ee);
+
+  const arms = 4;
+  const a = 60;
+  const b = 0.18;
+
+  for (let i = 0; i < starCount; i++) {
+    const isCore = Math.random() < 0.22;
+
+    let r, theta, y;
+    if (isCore) {
+      // Dense galactic bulge — concentrated in center
+      r = Math.pow(Math.random(), 2.5) * 450;
+      theta = Math.random() * Math.PI * 2;
+      y = (Math.random() - 0.5) * (280 - (r / 450) * 200);
+    } else {
+      const armIdx = i % arms;
+      const armAngle = (armIdx * Math.PI * 2) / arms;
+      const t = Math.random() * Math.PI * 4.8;
+      r = a * Math.exp(b * t);
+      // Tighter arm clustering: scatter proportional to distance but narrower
+      const armSpread = 40 + r * 0.12;
+      r += (Math.random() - 0.5) * armSpread;
+      theta = armAngle + t + (Math.random() - 0.5) * (100 / (r + 80));
+      y = (Math.random() - 0.5) * (100 * Math.exp(-r / 2000) + 10);
+    }
+
+    starPos[i * 3] = Math.cos(theta) * r;
+    starPos[i * 3 + 1] = y;
+    starPos[i * 3 + 2] = Math.sin(theta) * r;
+
+    let mixedColor;
+    if (r < 350) {
+      mixedColor = innerColor.clone().lerp(armColor, r / 350);
+    } else {
+      mixedColor = armColor.clone().lerp(outerColor, Math.min(1.0, (r - 350) / 3000));
+    }
+
+    starColors[i * 3] = mixedColor.r;
+    starColors[i * 3 + 1] = mixedColor.g;
+    starColors[i * 3 + 2] = mixedColor.b;
+  }
+
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+  const starMat = new THREE.PointsMaterial({
+    size: 3.0,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.85,
+    blending: THREE.AdditiveBlending
+  });
+  galaxyGroup.add(new THREE.Points(starGeo, starMat));
+
+  // C. Galactic Bulge Glow (warm dense center haze)
+  const bulgeCount = 20000;
+  const bulgeGeo = new THREE.BufferGeometry();
+  const bulgePos = new Float32Array(bulgeCount * 3);
+  const bulgeColors = new Float32Array(bulgeCount * 3);
+  const bulgeWarm = new THREE.Color(0xffcc66);
+  const bulgeHot = new THREE.Color(0xffffff);
+
+  for (let i = 0; i < bulgeCount; i++) {
+    const r = Math.pow(Math.random(), 3) * 350;
+    const theta = Math.random() * Math.PI * 2;
+    const y = (Math.random() - 0.5) * (200 * (1 - r / 350) + 10);
+    bulgePos[i * 3] = Math.cos(theta) * r;
+    bulgePos[i * 3 + 1] = y;
+    bulgePos[i * 3 + 2] = Math.sin(theta) * r;
+    const c = bulgeHot.clone().lerp(bulgeWarm, r / 350);
+    bulgeColors[i * 3] = c.r;
+    bulgeColors[i * 3 + 1] = c.g;
+    bulgeColors[i * 3 + 2] = c.b;
+  }
+
+  bulgeGeo.setAttribute('position', new THREE.BufferAttribute(bulgePos, 3));
+  bulgeGeo.setAttribute('color', new THREE.BufferAttribute(bulgeColors, 3));
+
+  const bulgeMat = new THREE.PointsMaterial({
+    size: 6.0,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.5,
+    blending: THREE.AdditiveBlending
+  });
+  galaxyGroup.add(new THREE.Points(bulgeGeo, bulgeMat));
+
+  // D. Interstellar Dust Nebulae (40,000 particles — dense arm dust lanes)
+  const nebulaCount = 40000;
+  const nebulaGeo = new THREE.BufferGeometry();
+  const nebulaPos = new Float32Array(nebulaCount * 3);
+  const nebulaColors = new Float32Array(nebulaCount * 3);
+
+  const magentaNebula = new THREE.Color(0xff2299);
+  const cyanNebula = new THREE.Color(0x00ddff);
+  const warmNebula = new THREE.Color(0xff8844);
+
+  for (let i = 0; i < nebulaCount; i++) {
+    const armIdx = i % arms;
+    const armAngle = (armIdx * Math.PI * 2) / arms;
+    const t = Math.random() * Math.PI * 4.8;
+    const baseR = a * Math.exp(b * t);
+    const armSpread = 30 + baseR * 0.1;
+    const r = baseR + (Math.random() - 0.5) * armSpread;
+    const theta = armAngle + t + (Math.random() - 0.5) * 0.3;
+    const y = (Math.random() - 0.5) * 60;
+
+    nebulaPos[i * 3] = Math.cos(theta) * r;
+    nebulaPos[i * 3 + 1] = y;
+    nebulaPos[i * 3 + 2] = Math.sin(theta) * r;
+
+    const pick = Math.random();
+    const c = pick < 0.4 ? magentaNebula : pick < 0.75 ? cyanNebula : warmNebula;
+    nebulaColors[i * 3] = c.r;
+    nebulaColors[i * 3 + 1] = c.g;
+    nebulaColors[i * 3 + 2] = c.b;
+  }
+
+  nebulaGeo.setAttribute('position', new THREE.BufferAttribute(nebulaPos, 3));
+  nebulaGeo.setAttribute('color', new THREE.BufferAttribute(nebulaColors, 3));
+
+  const nebulaMat = new THREE.PointsMaterial({
+    size: 10.0,
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.2,
+    blending: THREE.AdditiveBlending
+  });
+  galaxyGroup.add(new THREE.Points(nebulaGeo, nebulaMat));
+
+  scene.add(galaxyGroup);
+  return galaxyGroup;
 }
 
 function createAsteroidBelts(scene, isRealisticScale) {
