@@ -530,3 +530,80 @@ export const ANDROMEDA_INFO = {
   }
 };
 
+export const TRIANGULUM_INFO = {
+  id: 'triangulum',
+  name: 'Triangulum Galaxy',
+  type: 'galaxy',
+  category: 'Deep Space',
+  color: '#60a5fa',
+  description: 'Triangulum Galaxy (M33) is a beautiful spiral galaxy in the Local Group, orbiting the Milky Way and Andromeda. It is smaller but richer in star-forming regions and dust lanes than the Milky Way.',
+  stats: {
+    'Type': 'Unbarred Spiral (SA(s)cd)',
+    'Diameter': '60,000 Light-Years',
+    'Stars': '40 Billion',
+    'Distance from Earth': '2.73M Light-Years',
+    'Notable Feature': 'Large star-forming arms',
+    'Local Group Role': 'Third-largest galaxy'
+  }
+};
+
+export const EXTRA_COSMIC_OBJECTS = {
+  triangulum: TRIANGULUM_INFO,
+  'dwarf-m110': {
+    id: 'dwarf-m110',
+    name: 'M110 Dwarf Galaxy',
+    type: 'dwarf_galaxy',
+    category: 'Deep Space',
+    color: '#ffd700',
+    description: 'Messier 110 is a dwarf elliptical galaxy orbiting Andromeda. It is compact, dim, and rich in older stars with a smooth, low-surface-brightness glow.',
+    stats: {
+      'Type': 'Dwarf Elliptical',
+      'Distance from Earth': '2.7M Light-Years',
+      'Parent Galaxy': 'Andromeda',
+      'Appearance': 'Smooth, diffuse stellar halo'
+    }
+  },
+  'dwarf-m32': {
+    id: 'dwarf-m32',
+    name: 'M32 Elliptical Dwarf',
+    type: 'dwarf_galaxy',
+    category: 'Deep Space',
+    color: '#ff6b9d',
+    description: 'Messier 32 is a compact satellite galaxy of Andromeda. It is one of the closest dwarf galaxies to the Milky Way and shows signs of tidal disruption from Andromeda.',
+    stats: {
+      'Type': 'Compact Elliptical',
+      'Distance from Earth': '2.5M Light-Years',
+      'Parent Galaxy': 'Andromeda',
+      'Notable Feature': 'Dense core and tidal distortion'
+    }
+  },
+  'nebula-cluster-cygnus': {
+    id: 'nebula-cluster-cygnus',
+    name: 'Cygnus Nebula Cluster',
+    type: 'nebula_cluster',
+    category: 'Deep Space',
+    color: '#00ccff',
+    description: 'This bright nebula cluster is a diffuse emission region filled with glowing gas and dense stellar nurseries. It is a vivid example of active star formation within the galactic neighborhood.',
+    stats: {
+      'Type': 'Emission Nebula Cluster',
+      'Primary Gas': 'Ionized hydrogen',
+      'Appearance': 'Blue-green glowing filaments',
+      'Star Formation': 'Active'
+    }
+  },
+  'nebula-cluster-rose': {
+    id: 'nebula-cluster-rose',
+    name: 'Rose Dust Nebula',
+    type: 'nebula_cluster',
+    category: 'Deep Space',
+    color: '#ff4d8d',
+    description: 'A rose-hued dust and ionized gas cloud, rich in fine particulate matter and energetic stellar winds. It glows softly where hot young stars illuminate the surrounding gas.',
+    stats: {
+      'Type': 'Dust + Emission Nebula',
+      'Dominant Color': 'Rose-pink',
+      'Composition': 'Gas + dust lanes',
+      'Star Formation': 'Bursting'
+    }
+  }
+};
+

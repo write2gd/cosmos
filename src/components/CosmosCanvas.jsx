@@ -24,7 +24,8 @@ function cubicEaseInOut(t) {
 
 // Galactic Center Offset — positioned so Sun at (0,0,0) lies inside the outer Orion arm
 const GALACTIC_CENTER = new THREE.Vector3(600, 20, 400);
-// Solar System position within the Milky Way (Orion arm, ~200 units from galactic center)
+// Solar System position within the Milky Way (Orion arm, ~26,000 ly from center)
+// In scene units: offset from galactic center along an arm, scaled to look embedded in arm
 const SOLAR_SYSTEM_POSITION = new THREE.Vector3(200, -50, 150);
 // Andromeda Center Offset — positioned far away in another quadrant of deep space
 const ANDROMEDA_CENTER = new THREE.Vector3(-1800, 400, -1500);
@@ -154,6 +155,7 @@ export default function CosmosCanvas({
   const solarSystemGroupRef = useRef(null);
 
   const [hoverInfo, setHoverInfo] = useState(null);
+  const deepSpaceInteractablesRef = useRef([]);
 
   const selectedBodyIdRef = useRef(selectedBodyId);
   const isRealisticScaleRef = useRef(isRealisticScale);
@@ -332,8 +334,9 @@ export default function CosmosCanvas({
     const galaxyGroup = createMilkyWayGalaxy(scene);
     const andromedaGroup = createAndromedaGalaxy(scene);
     const triangulumGroup = createTriangulumGalaxy(scene);
-    createDwarfGalaxies(scene);
-    createNebulaFilaments(scene);
+    const deepSpaceInteractables = [];
+    deepSpaceInteractables.push(...createDwarfGalaxies(scene));
+    deepSpaceInteractables.push(...createNebulaFilaments(scene));
 
     // Scale galaxies so they always dwarf the solar system in both scale modes
     if (isRealisticScale) {
@@ -353,24 +356,43 @@ export default function CosmosCanvas({
     const bodyMeshes = {};
     const orbitLines = [];
 
-    // Create a container group for the entire solar system in realistic scale
+    // Create a galactic-orbit pivot so the solar system revolves around the galactic center
+    // in BOTH visual and realistic modes.
+    const galacticOrbitPivot = new THREE.Group();
+    if (isRealisticScale) {
+      // Realistic: pivot sits at galactic center (scaled), solar system at arm offset
+      galacticOrbitPivot.position.copy(GALACTIC_CENTER).multiplyScalar(30);
+    } else {
+      // Visual: pivot sits at galactic center in scene space
+      galacticOrbitPivot.position.copy(GALACTIC_CENTER);
+    }
+    scene.add(galacticOrbitPivot);
+
+    // Create a container group for the entire solar system
     const solarSystemGroup = new THREE.Group();
     if (isRealisticScale) {
+      // Place solar system offset from galactic center inside the Orion arm
       solarSystemGroup.position.copy(SOLAR_SYSTEM_POSITION);
+      galacticOrbitPivot.add(solarSystemGroup);
+    } else {
+      // Visual: solar system stays at its original world position (0,0,0).
+      // Since the pivot is at GALACTIC_CENTER, offset by -GALACTIC_CENTER so
+      // the world position is exactly (0,0,0) — preserving the original distance
+      // from the galaxy — while the pivot rotation makes it orbit the center.
+      solarSystemGroup.position.copy(GALACTIC_CENTER).negate();
+      galacticOrbitPivot.add(solarSystemGroup);
     }
-    scene.add(solarSystemGroup);
     solarSystemGroupRef.current = solarSystemGroup;
+    // Store galactic pivot on the solarSystemGroup so the animate loop can reach it
+    solarSystemGroup.userData.galacticOrbitPivot = galacticOrbitPivot;
 
     CELESTIAL_BODIES.forEach((body) => {
       const radius = isRealisticScale ? Math.max(0.2, body.realRadius / 15000) : body.visualRadius;
       const distance = isRealisticScale ? body.realDistance * 1.2 : body.visualDistance;
 
       const orbitGroup = new THREE.Group();
-      if (isRealisticScale) {
-        solarSystemGroup.add(orbitGroup);
-      } else {
-        scene.add(orbitGroup);
-      }
+      // Always add to solarSystemGroup (which is parented to galacticOrbitPivot)
+      solarSystemGroup.add(orbitGroup);
 
       let mesh;
 
@@ -413,6 +435,39 @@ export default function CosmosCanvas({
           const cloudsMesh = new THREE.Mesh(cloudsGeo, cloudsMat);
           mesh.add(cloudsMesh);
           mesh.userData.cloudsMesh = cloudsMesh;
+
+          const nightGeo = new THREE.SphereGeometry(radius * 1.04, 48, 48);
+          const nightMat = new THREE.ShaderMaterial({
+            transparent: true,
+            depthWrite: false,
+            uniforms: {
+              sunDirection: { value: new THREE.Vector3(1, 0, 0) },
+              tintColor: { value: new THREE.Color(0x0a1d38) }
+            },
+            vertexShader: `
+              varying vec3 vNormal;
+              void main() {
+                vNormal = normalize(normalMatrix * normal);
+                gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+              }
+            `,
+            fragmentShader: `
+              uniform vec3 sunDirection;
+              uniform vec3 tintColor;
+              varying vec3 vNormal;
+              void main() {
+                float sunAmount = clamp(dot(normalize(sunDirection), normalize(vNormal)), 0.0, 1.0);
+                float darkness = 1.0 - sunAmount;
+                float alpha = darkness * 0.9;
+                vec3 color = tintColor * (0.2 + darkness * 0.8);
+                gl_FragColor = vec4(color, alpha);
+              }
+            `
+          });
+          const nightMesh = new THREE.Mesh(nightGeo, nightMat);
+          nightMesh.renderOrder = 2;
+          mesh.add(nightMesh);
+          mesh.userData.nightMesh = nightMesh;
 
           const atmosGeo = new THREE.SphereGeometry(radius * 1.12, 32, 32);
           const atmosMat = new THREE.MeshBasicMaterial({
@@ -460,7 +515,16 @@ export default function CosmosCanvas({
         const parentMesh = bodyMeshes[body.parentBodyId].mesh;
         const moonPivot = new THREE.Group();
         parentMesh.add(moonPivot);
-        mesh.position.set(distance, 0, 0);
+        // In realistic scale, ensure the moon doesn't overlap its parent body.
+        // The parent's rendered radius may be close to or larger than the moon's orbit distance.
+        let moonDistance = distance;
+        if (isRealisticScale) {
+          const parentBody = bodyMeshes[body.parentBodyId].bodyData;
+          const parentRadius = Math.max(0.2, parentBody.realRadius / 15000);
+          const minDist = parentRadius + radius + 0.3; // parent surface + moon radius + gap
+          moonDistance = Math.max(moonDistance, minDist);
+        }
+        mesh.position.set(moonDistance, 0, 0);
         moonPivot.add(mesh);
         bodyMeshes[body.id] = { mesh, pivot: moonPivot, bodyData: body };
       } else {
@@ -481,7 +545,7 @@ export default function CosmosCanvas({
             opacity: showOrbits ? 0.35 : 0
           });
           const orbitLine = new THREE.LineLoop(orbitGeo, orbitMat);
-          scene.add(orbitLine);
+          solarSystemGroup.add(orbitLine);
           orbitLines.push(orbitLine);
         }
 
@@ -493,13 +557,30 @@ export default function CosmosCanvas({
 
     meshesRef.current = bodyMeshes;
     orbitsRef.current = orbitLines;
+    deepSpaceInteractablesRef.current = deepSpaceInteractables;
 
     // 7. ASTEROID BELT
-    const asteroidMesh = createAsteroidBelts(isRealisticScale ? solarSystemGroup : scene, isRealisticScale);
+    const asteroidMesh = createAsteroidBelts(solarSystemGroup, isRealisticScale);
 
-    // Initial Camera Setup (Earth)
+    const updateEarthNightTint = () => {
+      const earthMesh = bodyMeshes['earth']?.mesh;
+      const sunMesh = bodyMeshes['sun']?.mesh;
+      if (!earthMesh || !sunMesh) return;
+
+      const sunWorldPos = new THREE.Vector3();
+      sunMesh.getWorldPosition(sunWorldPos);
+      const localSunDirection = earthMesh.worldToLocal(sunWorldPos.clone()).normalize();
+      const nightMesh = earthMesh.userData.nightMesh;
+      if (nightMesh && nightMesh.material && nightMesh.material.uniforms) {
+        nightMesh.material.uniforms.sunDirection.value.copy(localSunDirection);
+      }
+    };
+
+    // Initial Camera Setup (Earth) — use world position since solar system is now inside galactic pivot
     if (bodyMeshes['earth']) {
       const earthMesh = bodyMeshes['earth'].mesh;
+      // Force matrix update so world position is correct even before first frame
+      galacticOrbitPivot.updateMatrixWorld(true);
       const worldPos = new THREE.Vector3();
       earthMesh.getWorldPosition(worldPos);
       controls.target.copy(worldPos);
@@ -518,6 +599,7 @@ export default function CosmosCanvas({
       raycaster.setFromCamera(mouse, camera);
       const interactables = [];
       Object.values(bodyMeshes).forEach((b) => interactables.push(b.mesh));
+      interactables.push(...deepSpaceInteractablesRef.current);
 
       const intersects = raycaster.intersectObjects(interactables, true);
 
@@ -569,6 +651,9 @@ export default function CosmosCanvas({
     let animationFrameId;
     let clock = new THREE.Clock();
 
+    // Galactic orbit speed: ~225 million years per orbit → very slow visual rotation
+    const GALACTIC_ORBIT_SPEED = 0.0004; // radians per second (completes one loop in ~4 hours real time)
+
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
       const delta = clock.getDelta();
@@ -576,12 +661,18 @@ export default function CosmosCanvas({
       const currentSelectedId = selectedBodyIdRef.current;
       const flightState = flightStateRef.current;
 
-      // Slow majestic galaxy rotation
+      // Slow majestic galaxy disc rotation (spin in place)
       if (galaxyGroup) {
         galaxyGroup.rotation.y += delta * 0.0015;
       }
       if (andromedaGroup) {
-        andromedaGroup.rotation.y += delta * 0.0012; // Slow majestic rotation for Andromeda
+        andromedaGroup.rotation.y += delta * 0.0012;
+      }
+
+      // Solar system orbits the galactic center in BOTH visual and realistic modes
+      const galacticPivot = solarSystemGroupRef.current?.userData?.galacticOrbitPivot;
+      if (galacticPivot) {
+        galacticPivot.rotation.y += delta * GALACTIC_ORBIT_SPEED;
       }
 
       // Rotate planets
@@ -598,6 +689,8 @@ export default function CosmosCanvas({
           if (pivot) pivot.rotation.y += angleDelta * 2;
         }
       });
+
+      updateEarthNightTint();
 
       if (asteroidMesh) {
         asteroidMesh.rotation.y += delta * 0.01 * (currentSpeed > 0 ? currentSpeed * 0.2 : 1);
@@ -651,13 +744,13 @@ export default function CosmosCanvas({
         const worldPos = new THREE.Vector3();
         observePlanetMesh.getWorldPosition(worldPos);
         
-        // Apply negative offset to keep planet at origin
+        // Apply negative offset to keep planet at origin (realistic mode only)
         const offset = worldPos.clone().multiplyScalar(-1);
         if (isRealisticScaleRef.current) {
-          solarSystemGroupRef.current.position.add(offset.multiplyScalar(0.05)); // Smooth transition
+          solarSystemGroupRef.current.position.add(offset.multiplyScalar(0.05));
         }
       } else if (solarSystemGroupRef.current && isRealisticScaleRef.current) {
-        // Return to normal position when geocentric view is off
+        // Return to arm-offset position when geocentric view is off
         const targetPos = SOLAR_SYSTEM_POSITION.clone();
         solarSystemGroupRef.current.position.lerp(targetPos, 0.05);
       }
@@ -1375,19 +1468,20 @@ function createTriangulumGalaxy(scene) {
 // Create dwarf elliptical galaxies around Andromeda
 function createDwarfGalaxies(scene) {
   const dwarfPositions = [
-    { pos: new THREE.Vector3(500, 150, 400), color: 0xffd700, size: 0.8 },  // M110
-    { pos: new THREE.Vector3(-600, -200, 300), color: 0xff6b9d, size: 0.6 },  // M32
-    { pos: new THREE.Vector3(300, -400, -500), color: 0x87ceeb, size: 0.5 },  // Small dwarf
-    { pos: new THREE.Vector3(-400, 300, 600), color: 0xffa500, size: 0.7 },  // Another dwarf
-    { pos: new THREE.Vector3(200, -100, 400), color: 0xff69b4, size: 0.4 }   // Tiny dwarf
+    { pos: new THREE.Vector3(500, 150, 400), color: 0xffd700, size: 0.8, id: 'dwarf-m110', name: 'M110 Dwarf Galaxy' },
+    { pos: new THREE.Vector3(-600, -200, 300), color: 0xff6b9d, size: 0.6, id: 'dwarf-m32', name: 'M32 Dwarf Galaxy' },
+    { pos: new THREE.Vector3(300, -400, -500), color: 0x87ceeb, size: 0.5, id: 'dwarf-lyra', name: 'Lyra Dwarf' },
+    { pos: new THREE.Vector3(-400, 300, 600), color: 0xffa500, size: 0.7, id: 'dwarf-auriga', name: 'Auriga Dwarf' },
+    { pos: new THREE.Vector3(200, -100, 400), color: 0xff69b4, size: 0.4, id: 'dwarf-pegasus', name: 'Pegasus Dwarf' }
   ];
 
-  dwarfPositions.forEach(({ pos, color, size }) => {
+  const interactables = [];
+
+  dwarfPositions.forEach(({ pos, color, size, id, name }) => {
     const dwarfGroup = new THREE.Group();
     const finalPos = ANDROMEDA_CENTER.clone().add(pos);
     dwarfGroup.position.copy(finalPos);
 
-    // Create spherical elliptical galaxy
     const starCount = Math.floor(20000 * size * size);
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(starCount * 3);
@@ -1422,21 +1516,46 @@ function createDwarfGalaxies(scene) {
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    dwarfGroup.add(new THREE.Points(geo, mat));
+
+    const mesh = new THREE.Points(geo, mat);
+    mesh.userData = {
+      bodyId: id,
+      bodyData: {
+        id,
+        name,
+        type: 'dwarf_galaxy',
+        category: 'Deep Space',
+        color: `#${color.toString(16).padStart(6, '0')}`,
+        description: 'A small companion galaxy orbiting a larger galactic system, containing older stars and a dim, diffuse glow.',
+        stats: {
+          'Type': 'Dwarf Galaxy',
+          'Host Galaxy': 'Andromeda',
+          'Visual Brightness': 'Low surface brightness',
+          'Star Population': 'Ancient stellar population'
+        }
+      }
+    };
+
+    dwarfGroup.add(mesh);
     scene.add(dwarfGroup);
+    interactables.push(mesh);
   });
+
+  return interactables;
 }
 
 // Create galactic nebula clusters in space
 function createNebulaFilaments(scene) {
   const nebulaClusters = [
-    { pos: new THREE.Vector3(1200, 500, -1000), color: 0x00ff88, radius: 200 },
-    { pos: new THREE.Vector3(-1500, -300, 800), color: 0xff00ff, radius: 180 },
-    { pos: new THREE.Vector3(800, 1000, 600), color: 0x00ccff, radius: 150 },
-    { pos: new THREE.Vector3(-900, -700, -1200), color: 0xffaa00, radius: 170 }
+    { pos: new THREE.Vector3(1200, 500, -1000), color: 0x00ff88, radius: 200, id: 'nebula-cluster-cygnus', name: 'Cygnus Nebula Cluster' },
+    { pos: new THREE.Vector3(-1500, -300, 800), color: 0xff00ff, radius: 180, id: 'nebula-cluster-rose', name: 'Rose Dust Nebula' },
+    { pos: new THREE.Vector3(800, 1000, 600), color: 0x00ccff, radius: 150, id: 'nebula-cluster-aquila', name: 'Aquila Gas Cloud' },
+    { pos: new THREE.Vector3(-900, -700, -1200), color: 0xffaa00, radius: 170, id: 'nebula-cluster-lacerta', name: 'Lacerta Emission Cloud' }
   ];
 
-  nebulaClusters.forEach(({ pos, color, radius }) => {
+  const interactables = [];
+
+  nebulaClusters.forEach(({ pos, color, radius, id, name }) => {
     const particleCount = 40000;
     const geo = new THREE.BufferGeometry();
     const positions = new Float32Array(particleCount * 3);
@@ -1452,7 +1571,6 @@ function createNebulaFilaments(scene) {
       positions[i * 3 + 1] = pos.y + r * Math.sin(phi) * Math.sin(theta);
       positions[i * 3 + 2] = pos.z + r * Math.cos(phi);
 
-      // Fade colors for nebula effect
       const fade = 1 - r / radius;
       colors[i * 3] = c.r * fade;
       colors[i * 3 + 1] = c.g * fade;
@@ -1471,8 +1589,31 @@ function createNebulaFilaments(scene) {
       blending: THREE.AdditiveBlending,
       depthWrite: false
     });
-    scene.add(new THREE.Points(geo, mat));
+
+    const mesh = new THREE.Points(geo, mat);
+    mesh.userData = {
+      bodyId: id,
+      bodyData: {
+        id,
+        name,
+        type: 'nebula_cluster',
+        category: 'Deep Space',
+        color: `#${c.getHexString()}`,
+        description: 'A glowing cluster of gas and dust where stars are being born and surrounding material is being illuminated by intense radiation.',
+        stats: {
+          'Type': 'Nebula Cluster',
+          'Composition': 'Ionized gases + dust',
+          'Energy Source': 'Nearby hot stars',
+          'Appearance': 'Diffuse luminous glow'
+        }
+      }
+    };
+
+    scene.add(mesh);
+    interactables.push(mesh);
   });
+
+  return interactables;
 }
 
 function createAsteroidBelts(scene, isRealisticScale) {
@@ -1508,7 +1649,7 @@ function createAsteroidBelts(scene, isRealisticScale) {
     asteroidPositions.push(pos);
 
     dummy.position.copy(pos);
-    const scale = 0.5 + Math.random() * 1.5;
+    const scale = (0.5 + Math.random() * 1.5) * 0.5;
     dummy.scale.set(scale, scale, scale);
     dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
     dummy.updateMatrix();

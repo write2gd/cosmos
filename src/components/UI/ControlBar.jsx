@@ -55,8 +55,8 @@ export default function ControlBar({
           const body = id === 'milkyway'
             ? { id: 'milkyway', name: 'Milky Way', color: '#a855f7' }
             : id === 'andromeda'
-            ? { id: 'andromeda', name: 'Andromeda', color: '#3b82f6' }
-            : CELESTIAL_BODIES.find((b) => b.id === id);
+              ? { id: 'andromeda', name: 'Andromeda', color: '#3b82f6' }
+              : CELESTIAL_BODIES.find((b) => b.id === id);
 
           if (!body) return null;
           const isSelected = selectedBodyId === id;
@@ -122,13 +122,13 @@ export default function ControlBar({
           <FastForward style={{ width: '14px', height: '14px', color: '#22d3ee' }} />
           <input
             type="range"
-            min="0.1"
-            max="10"
-            step="0.1"
+            min="0"
+            max="1000"
+            step="10"
             value={timeSpeed}
             onChange={(e) => onChangeTimeSpeed(Number(e.target.value))}
             style={{
-              width: '120px',
+              width: '888px',
               cursor: 'pointer',
               accentColor: '#22d3ee'
             }}
