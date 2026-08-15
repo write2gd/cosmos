@@ -24,7 +24,8 @@ export default function ControlBar({
     'uranus',
     'neptune',
     'pluto',
-    'milkyway'
+    'milkyway',
+    'andromeda'
   ];
 
   return (
@@ -47,12 +48,14 @@ export default function ControlBar({
         gap: '8px',
         pointerEvents: 'auto',
         overflowX: 'auto',
-        maxWidth: '65vw',
+        maxWidth: 'calc(100% - 320px)',
         paddingBottom: '4px'
       }}>
         {mainPills.map((id) => {
           const body = id === 'milkyway'
             ? { id: 'milkyway', name: 'Milky Way', color: '#a855f7' }
+            : id === 'andromeda'
+            ? { id: 'andromeda', name: 'Andromeda', color: '#3b82f6' }
             : CELESTIAL_BODIES.find((b) => b.id === id);
 
           if (!body) return null;

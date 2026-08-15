@@ -13,9 +13,17 @@ export default function HeaderHUD({
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
 
-  const filteredBodies = CELESTIAL_BODIES.filter((b) =>
-    b.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
+  const extraBodies = [
+    { id: 'milkyway', name: 'Milky Way Galaxy', category: 'Deep Space', color: '#a855f7' },
+    { id: 'andromeda', name: 'Andromeda Galaxy (M31)', category: 'Deep Space', color: '#3b82f6' }
+  ];
+
+  const filteredBodies = [
+    ...extraBodies.filter((b) => b.name.toLowerCase().includes(searchQuery.toLowerCase())),
+    ...CELESTIAL_BODIES.filter((b) =>
+      b.name.toLowerCase().includes(searchQuery.toLowerCase())
+    )
+  ];
 
   return (
     <header style={{
@@ -155,6 +163,30 @@ export default function HeaderHUD({
               >
                 <Sparkles style={{ width: '14px', height: '14px', color: '#c084fc' }} />
                 Milky Way Galaxy
+              </button>
+              <button
+                onClick={() => {
+                  onSelectBody('andromeda');
+                  setIsSearchOpen(false);
+                }}
+                style={{
+                  width: '100%',
+                  padding: '10px 14px',
+                  textAlign: 'left',
+                  fontSize: '12px',
+                  fontWeight: 600,
+                  color: '#93c5fd',
+                  background: 'transparent',
+                  border: 'none',
+                  borderBottom: '1px solid rgba(255,255,255,0.08)',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px'
+                }}
+              >
+                <Sparkles style={{ width: '14px', height: '14px', color: '#60a5fa' }} />
+                Andromeda Galaxy (M31)
               </button>
               {filteredBodies.length > 0 ? (
                 filteredBodies.map((b) => (

@@ -512,3 +512,21 @@ export const GALAXY_INFO = {
     'Solar Position': 'Orion-Cygnus Arm'
   }
 };
+
+export const ANDROMEDA_INFO = {
+  id: 'andromeda',
+  name: 'Andromeda Galaxy',
+  type: 'galaxy',
+  category: 'Deep Space',
+  color: '#3b82f6',
+  description: 'Andromeda (M31) is a barred spiral galaxy and the nearest large galaxy to the Milky Way, located approximately 2.5 million light-years from Earth. It is on a collision course with the Milky Way, set to merge in about 4.5 billion years into a giant elliptical galaxy.',
+  stats: {
+    'Type': 'Barred Spiral (SA(s)b)',
+    'Diameter': '220,000 Light-Years',
+    'Stars': '1 Trillion',
+    'Distance from Earth': '2.537M Light-Years',
+    'Central Black Hole': 'Andromeda Core (P1/P2)',
+    'Merger Countdown': '4.5 Billion Years'
+  }
+};
+

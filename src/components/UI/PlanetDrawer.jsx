@@ -1,12 +1,14 @@
 import React from 'react';
 import { X, Orbit, Radio } from 'lucide-react';
-import { CELESTIAL_BODIES, GALAXY_INFO } from '../../data/celestialData';
+import { CELESTIAL_BODIES, GALAXY_INFO, ANDROMEDA_INFO } from '../../data/celestialData';
 
 export default function PlanetDrawer({ selectedBodyId, onClose, onSelectBody }) {
   if (!selectedBodyId) return null;
 
   const data = selectedBodyId === 'milkyway'
     ? GALAXY_INFO
+    : selectedBodyId === 'andromeda'
+    ? ANDROMEDA_INFO
     : CELESTIAL_BODIES.find((b) => b.id === selectedBodyId);
 
   if (!data) return null;

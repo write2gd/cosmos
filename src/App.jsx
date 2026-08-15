@@ -15,7 +15,7 @@ export default function App() {
 
   const handleSelectBody = useCallback((id) => {
     setSelectedBodyId(id);
-    spaceAudio.playChime(id === 'sun' ? 520 : id === 'milkyway' ? 660 : 440);
+    spaceAudio.playChime(id === 'sun' ? 520 : id === 'milkyway' ? 660 : id === 'andromeda' ? 700 : 440);
   }, []);
 
   const handleToggleAudio = () => {
