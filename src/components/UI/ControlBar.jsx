@@ -41,9 +41,9 @@ export default function ControlBar({
       justifyContent: 'space-between',
       gap: '16px'
     }}>
-      {/* Quick Access Celestial Pills for ALL Planets */}
+      {/* Quick Access Celestial Pills for ALL Planets - HIDDEN */}
       <div style={{
-        display: 'flex',
+        display: 'none',
         alignItems: 'center',
         gap: '8px',
         pointerEvents: 'auto',

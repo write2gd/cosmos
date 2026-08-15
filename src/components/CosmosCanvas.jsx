@@ -24,6 +24,8 @@ function cubicEaseInOut(t) {
 
 // Galactic Center Offset — positioned so Sun at (0,0,0) lies inside the outer Orion arm
 const GALACTIC_CENTER = new THREE.Vector3(600, 20, 400);
+// Solar System position within the Milky Way (Orion arm, ~200 units from galactic center)
+const SOLAR_SYSTEM_POSITION = new THREE.Vector3(200, -50, 150);
 // Andromeda Center Offset — positioned far away in another quadrant of deep space
 const ANDROMEDA_CENTER = new THREE.Vector3(-1800, 400, -1500);
 
@@ -301,10 +303,13 @@ export default function CosmosCanvas({
       pluto: createPlutoTexture()
     };
 
-    // 5. DEEP SPACE STARFIELD & EMBEDDED GALAXIES (MILKY WAY & ANDROMEDA)
+    // 5. DEEP SPACE STARFIELD & EMBEDDED GALAXIES (MILKY WAY, ANDROMEDA, TRIANGULUM, DWARFS & NEBULAE)
     createStarfield(scene);
     const galaxyGroup = createMilkyWayGalaxy(scene);
     const andromedaGroup = createAndromedaGalaxy(scene);
+    const triangulumGroup = createTriangulumGalaxy(scene);
+    createDwarfGalaxies(scene);
+    createNebulaFilaments(scene);
 
     // Scale galaxies so they always dwarf the solar system in both scale modes
     if (isRealisticScale) {
@@ -324,12 +329,23 @@ export default function CosmosCanvas({
     const bodyMeshes = {};
     const orbitLines = [];
 
+    // Create a container group for the entire solar system in realistic scale
+    const solarSystemGroup = new THREE.Group();
+    if (isRealisticScale) {
+      solarSystemGroup.position.copy(SOLAR_SYSTEM_POSITION);
+    }
+    scene.add(solarSystemGroup);
+
     CELESTIAL_BODIES.forEach((body) => {
       const radius = isRealisticScale ? Math.max(0.2, body.realRadius / 15000) : body.visualRadius;
-      const distance = isRealisticScale ? body.realDistance * 1.5 : body.visualDistance;
+      const distance = isRealisticScale ? body.realDistance * 1.2 : body.visualDistance;
 
       const orbitGroup = new THREE.Group();
-      scene.add(orbitGroup);
+      if (isRealisticScale) {
+        solarSystemGroup.add(orbitGroup);
+      } else {
+        scene.add(orbitGroup);
+      }
 
       let mesh;
 
@@ -454,7 +470,7 @@ export default function CosmosCanvas({
     orbitsRef.current = orbitLines;
 
     // 7. ASTEROID BELT
-    const asteroidMesh = createAsteroidBelts(scene, isRealisticScale);
+    const asteroidMesh = createAsteroidBelts(isRealisticScale ? solarSystemGroup : scene, isRealisticScale);
 
     // Initial Camera Setup (Earth)
     if (bodyMeshes['earth']) {
@@ -572,6 +588,11 @@ export default function CosmosCanvas({
           const gScale = isRealisticScaleRef.current ? 30 : 1;
           targetWorldPos.copy(ANDROMEDA_CENTER).multiplyScalar(gScale);
           offsetDist = 3800 * 1.5 * gScale;
+        } else if (currentSelectedId === 'triangulum') {
+          const gScale = isRealisticScaleRef.current ? 30 : 1;
+          const triangulumPos = ANDROMEDA_CENTER.clone().add(new THREE.Vector3(800, 200, -300));
+          targetWorldPos.copy(triangulumPos).multiplyScalar(gScale);
+          offsetDist = 2500 * gScale;
         } else if (bodyMeshes[currentSelectedId]) {
           const selectedObj = bodyMeshes[currentSelectedId].mesh;
           selectedObj.getWorldPosition(targetWorldPos);
@@ -987,8 +1008,8 @@ function createAndromedaGalaxy(scene) {
   });
   galaxyGroup.add(new THREE.Points(p1StarsGeo, p1StarsMat));
 
-  // B. 2-ARM LOGARITHMIC SPIRAL & RING OF FIRE STARS (100,000 particles total)
-  const starCount = 100000;
+  // B. 2-ARM LOGARITHMIC SPIRAL & RING OF FIRE STARS (200,000 particles for detail)
+  const starCount = 200000;
   const starGeo = new THREE.BufferGeometry();
   const starPos = new Float32Array(starCount * 3);
   const starColors = new Float32Array(starCount * 3);
@@ -998,8 +1019,8 @@ function createAndromedaGalaxy(scene) {
   const outerColor = new THREE.Color(0x6366f1); // Indigo blue
 
   const arms = 2; // Andromeda is a 2-arm dominant spiral
-  const a = 110;  // starting radius of the arms
-  const b = 0.135; // Winding factor (tighter wind)
+  const a = 150;  // increased starting radius of the arms
+  const b = 0.12; // Winding factor (looser wind for bigger arms)
 
   for (let i = 0; i < starCount; i++) {
     const isCore = Math.random() < 0.25; // 25% Bulge stars
@@ -1014,33 +1035,33 @@ function createAndromedaGalaxy(scene) {
       y = (Math.random() - 0.5) * (200 - (r / 350) * 140) * 0.65;
       mixedColor = innerColor.clone().lerp(new THREE.Color(0xffffff), Math.random() * 0.5);
     } else {
-      // Continuous Logarithmic arms spanning from 150 to 1200 units
+      // Continuous Logarithmic arms spanning from 200 to 2000 units (much bigger)
       const armIdx = i % arms;
       const armAngle = (armIdx * Math.PI * 2) / arms;
       
       // Bias t to create higher inner density (density gradient)
-      const t = Math.pow(Math.random(), 1.25) * Math.PI * 5.2;
+      const t = Math.pow(Math.random(), 1.25) * Math.PI * 6.2;  // extended range
       const baseR = a * Math.exp(b * t);
-      let armSpread = 70 + baseR * 0.22;
+      let armSpread = 100 + baseR * 0.25;  // wider arm spread
       
       let targetR = baseR + (Math.random() - 0.5) * armSpread;
       
-      // Ring of Fire density enhancement around 950 to 1150 units (15% stars compressed into the ring zone)
-      if (targetR > 900 && targetR < 1200 && Math.random() < 0.5) {
-        targetR = 1050 + (targetR - 1050) * 0.35; // compress towards ring core
+      // Ring of Fire density enhancement around 1500 to 1900 units (outer arm)
+      if (targetR > 1400 && targetR < 2000 && Math.random() < 0.45) {
+        targetR = 1650 + (targetR - 1650) * 0.35; // compress towards ring core
       }
 
       r = targetR;
       theta = armAngle + t + (Math.random() - 0.5) * (120 / (r + 70));
       y = (Math.random() - 0.5) * (70 * Math.exp(-r / 2500) + 8);
 
-      if (r < 320) {
-        mixedColor = innerColor.clone().lerp(armColor, r / 320);
+      if (r < 350) {
+        mixedColor = innerColor.clone().lerp(armColor, r / 350);
       } else {
         // Shift to hot blue in the Ring of Fire zone, and indigo on the outskirts
-        const isRingZone = r > 950 && r < 1150;
+        const isRingZone = r > 1400 && r < 1900;
         const baseColor = isRingZone ? new THREE.Color(0xbae6fd) : armColor;
-        mixedColor = baseColor.clone().lerp(outerColor, Math.min(1.0, (r - 320) / 2000));
+        mixedColor = baseColor.clone().lerp(outerColor, Math.min(1.0, (r - 350) / 2500));
       }
     }
 
@@ -1067,8 +1088,8 @@ function createAndromedaGalaxy(scene) {
   });
   galaxyGroup.add(new THREE.Points(starGeo, starMat));
 
-  // C. DENSE BULGE GLOW (Soft volumetric particle haze)
-  const bulgeCount = 20000;
+  // C. DENSE BULGE GLOW (Soft volumetric particle haze - increased size)
+  const bulgeCount = 35000;
   const bulgeGeo = new THREE.BufferGeometry();
   const bulgePos = new Float32Array(bulgeCount * 3);
   const bulgeColors = new Float32Array(bulgeCount * 3);
@@ -1076,9 +1097,9 @@ function createAndromedaGalaxy(scene) {
   const bulgeHot = new THREE.Color(0xffffff);
 
   for (let i = 0; i < bulgeCount; i++) {
-    const r = Math.pow(Math.random(), 2.5) * 350;
+    const r = Math.pow(Math.random(), 2.5) * 450;  // larger bulge
     const theta = Math.random() * Math.PI * 2;
-    const y = (Math.random() - 0.5) * (180 * (1 - r / 350) + 10) * 0.65;
+    const y = (Math.random() - 0.5) * (220 * (1 - r / 450) + 15) * 0.65;
 
     bulgePos[i * 3] = Math.cos(theta) * r;
     bulgePos[i * 3 + 1] = y;
@@ -1104,8 +1125,8 @@ function createAndromedaGalaxy(scene) {
   });
   galaxyGroup.add(new THREE.Points(bulgeGeo, bulgeMat));
 
-  // D. INTERSTELLAR DUST LANES & REDDISH GAS NEBULAE (30,000 particles)
-  const nebulaCount = 30000;
+  // D. INTERSTELLAR DUST LANES & REDDISH GAS NEBULAE (50,000 particles - more detailed)
+  const nebulaCount = 50000;
   const nebulaGeo = new THREE.BufferGeometry();
   const nebulaPos = new Float32Array(nebulaCount * 3);
   const nebulaColors = new Float32Array(nebulaCount * 3);
@@ -1117,9 +1138,9 @@ function createAndromedaGalaxy(scene) {
   for (let i = 0; i < nebulaCount; i++) {
     const armIdx = i % arms;
     const armAngle = (armIdx * Math.PI * 2) / arms;
-    const t = Math.pow(Math.random(), 1.15) * Math.PI * 5.2;
+    const t = Math.pow(Math.random(), 1.15) * Math.PI * 6.2;  // extended range
     const baseR = a * Math.exp(b * t);
-    const armSpread = 50 + baseR * 0.16;
+    const armSpread = 70 + baseR * 0.2;  // wider spread
 
     const r = baseR + (Math.random() - 0.5) * armSpread;
     // Offset theta slightly to align dust lanes along the inner edges of spiral arms
@@ -1155,6 +1176,213 @@ function createAndromedaGalaxy(scene) {
   return galaxyGroup;
 }
 
+// Create Triangulum Galaxy (M33) - Major Local Group galaxy
+function createTriangulumGalaxy(scene) {
+  const galaxyGroup = new THREE.Group();
+  galaxyGroup.position.copy(ANDROMEDA_CENTER).add(new THREE.Vector3(800, 200, -300));
+  galaxyGroup.rotation.x = Math.PI * 0.35;
+  galaxyGroup.rotation.z = Math.PI * 0.25;
+
+  // Single spiral arm structure (face-on view)
+  const starCount = 80000;
+  const starGeo = new THREE.BufferGeometry();
+  const starPos = new Float32Array(starCount * 3);
+  const starColors = new Float32Array(starCount * 3);
+
+  const arms = 3;  // 3-armed spiral
+  const a = 80;
+  const b = 0.15;
+  const coreColor = new THREE.Color(0xfff4e6);
+  const armColor1 = new THREE.Color(0x60a5fa);
+  const armColor2 = new THREE.Color(0xf472b6);
+
+  for (let i = 0; i < starCount; i++) {
+    let r, theta, y;
+    if (Math.random() < 0.2) {
+      r = Math.pow(Math.random(), 2.3) * 300;
+      theta = Math.random() * Math.PI * 2;
+      y = (Math.random() - 0.5) * 60;
+    } else {
+      const armIdx = i % arms;
+      const armAngle = (armIdx * Math.PI * 2) / arms;
+      const t = Math.pow(Math.random(), 1.2) * Math.PI * 5.5;
+      const baseR = a * Math.exp(b * t);
+      r = baseR + (Math.random() - 0.5) * (60 + baseR * 0.18);
+      theta = armAngle + t + (Math.random() - 0.5) * (100 / (r + 50));
+      y = (Math.random() - 0.5) * (50 * Math.exp(-r / 1500) + 5);
+    }
+
+    starPos[i * 3] = Math.cos(theta) * r;
+    starPos[i * 3 + 1] = y;
+    starPos[i * 3 + 2] = Math.sin(theta) * r;
+
+    let color = coreColor.clone();
+    if (r < 300 && Math.random() < 0.5) {
+      color.lerp(armColor1, 0.4);
+    } else if (r > 200) {
+      color.lerp(armColor2, Math.min(1, r / 800));
+    }
+    starColors[i * 3] = color.r;
+    starColors[i * 3 + 1] = color.g;
+    starColors[i * 3 + 2] = color.b;
+  }
+
+  starGeo.setAttribute('position', new THREE.BufferAttribute(starPos, 3));
+  starGeo.setAttribute('color', new THREE.BufferAttribute(starColors, 3));
+
+  const starMat = new THREE.PointsMaterial({
+    size: 3.0,
+    map: createCircularParticleTexture(),
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.75,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  galaxyGroup.add(new THREE.Points(starGeo, starMat));
+
+  // Bulge
+  const bulgeCount = 15000;
+  const bulgeGeo = new THREE.BufferGeometry();
+  const bulgePos = new Float32Array(bulgeCount * 3);
+  const bulgeColors = new Float32Array(bulgeCount * 3);
+
+  for (let i = 0; i < bulgeCount; i++) {
+    const r = Math.pow(Math.random(), 2.5) * 280;
+    const theta = Math.random() * Math.PI * 2;
+    const y = (Math.random() - 0.5) * 80;
+
+    bulgePos[i * 3] = Math.cos(theta) * r;
+    bulgePos[i * 3 + 1] = y;
+    bulgePos[i * 3 + 2] = Math.sin(theta) * r;
+
+    const c = coreColor.clone().lerp(new THREE.Color(0xffffff), r / 280 * 0.3);
+    bulgeColors[i * 3] = c.r;
+    bulgeColors[i * 3 + 1] = c.g;
+    bulgeColors[i * 3 + 2] = c.b;
+  }
+
+  bulgeGeo.setAttribute('position', new THREE.BufferAttribute(bulgePos, 3));
+  bulgeGeo.setAttribute('color', new THREE.BufferAttribute(bulgeColors, 3));
+
+  const bulgeMat = new THREE.PointsMaterial({
+    size: 8.0,
+    map: createNebulaParticleTexture(),
+    vertexColors: true,
+    transparent: true,
+    opacity: 0.25,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false
+  });
+  galaxyGroup.add(new THREE.Points(bulgeGeo, bulgeMat));
+
+  scene.add(galaxyGroup);
+  return galaxyGroup;
+}
+
+// Create dwarf elliptical galaxies around Andromeda
+function createDwarfGalaxies(scene) {
+  const dwarfPositions = [
+    { pos: new THREE.Vector3(500, 150, 400), color: 0xffd700, size: 0.8 },  // M110
+    { pos: new THREE.Vector3(-600, -200, 300), color: 0xff6b9d, size: 0.6 },  // M32
+    { pos: new THREE.Vector3(300, -400, -500), color: 0x87ceeb, size: 0.5 },  // Small dwarf
+    { pos: new THREE.Vector3(-400, 300, 600), color: 0xffa500, size: 0.7 },  // Another dwarf
+    { pos: new THREE.Vector3(200, -100, 400), color: 0xff69b4, size: 0.4 }   // Tiny dwarf
+  ];
+
+  dwarfPositions.forEach(({ pos, color, size }) => {
+    const dwarfGroup = new THREE.Group();
+    const finalPos = ANDROMEDA_CENTER.clone().add(pos);
+    dwarfGroup.position.copy(finalPos);
+
+    // Create spherical elliptical galaxy
+    const starCount = Math.floor(20000 * size * size);
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(starCount * 3);
+    const colors = new Float32Array(starCount * 3);
+
+    const c = new THREE.Color(color);
+    const maxRadius = 80 * size;
+
+    for (let i = 0; i < starCount; i++) {
+      const r = Math.pow(Math.random(), 2) * maxRadius;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+
+      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = r * Math.cos(phi);
+
+      colors[i * 3] = c.r + (Math.random() - 0.5) * 0.2;
+      colors[i * 3 + 1] = c.g + (Math.random() - 0.5) * 0.2;
+      colors[i * 3 + 2] = c.b + (Math.random() - 0.5) * 0.2;
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 2.5 * size,
+      map: createCircularParticleTexture(),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.7,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    dwarfGroup.add(new THREE.Points(geo, mat));
+    scene.add(dwarfGroup);
+  });
+}
+
+// Create galactic nebula clusters in space
+function createNebulaFilaments(scene) {
+  const nebulaClusters = [
+    { pos: new THREE.Vector3(1200, 500, -1000), color: 0x00ff88, radius: 200 },
+    { pos: new THREE.Vector3(-1500, -300, 800), color: 0xff00ff, radius: 180 },
+    { pos: new THREE.Vector3(800, 1000, 600), color: 0x00ccff, radius: 150 },
+    { pos: new THREE.Vector3(-900, -700, -1200), color: 0xffaa00, radius: 170 }
+  ];
+
+  nebulaClusters.forEach(({ pos, color, radius }) => {
+    const particleCount = 40000;
+    const geo = new THREE.BufferGeometry();
+    const positions = new Float32Array(particleCount * 3);
+    const colors = new Float32Array(particleCount * 3);
+    const c = new THREE.Color(color);
+
+    for (let i = 0; i < particleCount; i++) {
+      const r = Math.pow(Math.random(), 1.3) * radius;
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.random() * Math.PI * 2;
+
+      positions[i * 3] = pos.x + r * Math.sin(phi) * Math.cos(theta);
+      positions[i * 3 + 1] = pos.y + r * Math.sin(phi) * Math.sin(theta);
+      positions[i * 3 + 2] = pos.z + r * Math.cos(phi);
+
+      // Fade colors for nebula effect
+      const fade = 1 - r / radius;
+      colors[i * 3] = c.r * fade;
+      colors[i * 3 + 1] = c.g * fade;
+      colors[i * 3 + 2] = c.b * fade;
+    }
+
+    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+    const mat = new THREE.PointsMaterial({
+      size: 15,
+      map: createNebulaParticleTexture(),
+      vertexColors: true,
+      transparent: true,
+      opacity: 0.3,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false
+    });
+    scene.add(new THREE.Points(geo, mat));
+  });
+}
+
 function createAsteroidBelts(scene, isRealisticScale) {
   const count = 1500;
   const geo = new THREE.DodecahedronGeometry(0.35, 1);
@@ -1166,8 +1394,8 @@ function createAsteroidBelts(scene, isRealisticScale) {
   const instancedMesh = new THREE.InstancedMesh(geo, mat, count);
   const dummy = new THREE.Object3D();
 
-  const minR = isRealisticScale ? 110 : 105;
-  const maxR = isRealisticScale ? 130 : 125;
+  const minR = isRealisticScale ? 260 : 105;
+  const maxR = isRealisticScale ? 310 : 125;
 
   for (let i = 0; i < count; i++) {
     const r = minR + Math.random() * (maxR - minR);

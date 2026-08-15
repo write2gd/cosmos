@@ -58,7 +58,7 @@ export default function App() {
         onSelectBody={handleSelectBody}
       />
 
-      {/* Bottom Controls Bar */}
+      {/* Bottom Speed Control Panel */}
       <ControlBar
         selectedBodyId={selectedBodyId}
         onSelectBody={handleSelectBody}
