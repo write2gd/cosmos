@@ -138,10 +138,12 @@ function createAndromedaAccretionDiskTexture() {
 export default function CosmosCanvas({
   selectedBodyId,
   onSelectBody,
+  onClickBodyInScene,
   isRealisticScale,
   timeSpeed,
   isPaused,
-  showOrbits
+  showOrbits,
+  observeFromPlanetId
 }) {
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
@@ -149,6 +151,7 @@ export default function CosmosCanvas({
   const controlsRef = useRef(null);
   const meshesRef = useRef({});
   const orbitsRef = useRef([]);
+  const solarSystemGroupRef = useRef(null);
 
   const [hoverInfo, setHoverInfo] = useState(null);
 
@@ -156,6 +159,7 @@ export default function CosmosCanvas({
   const isRealisticScaleRef = useRef(isRealisticScale);
   const timeSpeedRef = useRef(timeSpeed);
   const isPausedRef = useRef(isPaused);
+  const observeFromPlanetIdRef = useRef(observeFromPlanetId);
 
   const flightStateRef = useRef({
     isAnimating: false,
@@ -192,6 +196,26 @@ export default function CosmosCanvas({
   useEffect(() => {
     isPausedRef.current = isPaused;
   }, [isPaused]);
+
+  useEffect(() => {
+    observeFromPlanetIdRef.current = observeFromPlanetId;
+    
+    // Hide/show observation planet's mesh, but keep its moons visible
+    const bodyMeshes = meshesRef.current;
+    if (bodyMeshes) {
+      // Show all planets and moons first
+      Object.keys(bodyMeshes).forEach((id) => {
+        if (bodyMeshes[id] && bodyMeshes[id].mesh) {
+          bodyMeshes[id].mesh.visible = true;
+        }
+      });
+      
+      // Hide only the observation planet, keep its moons visible
+      if (observeFromPlanetId && bodyMeshes[observeFromPlanetId]) {
+        bodyMeshes[observeFromPlanetId].mesh.visible = false;
+      }
+    }
+  }, [observeFromPlanetId]);
 
   const startCinematicFlight = (targetId) => {
     const camera = cameraRef.current;
@@ -335,6 +359,7 @@ export default function CosmosCanvas({
       solarSystemGroup.position.copy(SOLAR_SYSTEM_POSITION);
     }
     scene.add(solarSystemGroup);
+    solarSystemGroupRef.current = solarSystemGroup;
 
     CELESTIAL_BODIES.forEach((body) => {
       const radius = isRealisticScale ? Math.max(0.2, body.realRadius / 15000) : body.visualRadius;
@@ -529,8 +554,11 @@ export default function CosmosCanvas({
     const handlePointerDown = (event) => {
       if (event.target !== renderer.domElement) return;
       const hitBody = getIntersectedBody(event);
-      if (hitBody && onSelectBody) {
-        onSelectBody(hitBody.id);
+      if (hitBody) {
+        // Open info board when clicking on object
+        if (onClickBodyInScene) {
+          onClickBodyInScene(hitBody.id);
+        }
       }
     };
 
@@ -573,6 +601,65 @@ export default function CosmosCanvas({
 
       if (asteroidMesh) {
         asteroidMesh.rotation.y += delta * 0.01 * (currentSpeed > 0 ? currentSpeed * 0.2 : 1);
+        
+        // Update asteroid brightness based on proximity to selected body
+        if (currentSelectedId && bodyMeshes[currentSelectedId]) {
+          const selectedMesh = bodyMeshes[currentSelectedId].mesh;
+          const selectedWorldPos = new THREE.Vector3();
+          selectedMesh.getWorldPosition(selectedWorldPos);
+          
+          const asteroidPositions = asteroidMesh.userData.asteroidPositions;
+          const proximityRadius = 50;  // Distance for brightness effect
+          let hasCloseAsteroid = false;
+          
+          if (asteroidPositions) {
+            for (let i = 0; i < asteroidPositions.length; i++) {
+              const astroWorldPos = asteroidPositions[i].clone();
+              if (solarSystemGroupRef.current) {
+                astroWorldPos.applyMatrix4(solarSystemGroupRef.current.matrixWorld);
+              }
+              
+              const distance = selectedWorldPos.distanceTo(astroWorldPos);
+              if (distance < proximityRadius) {
+                hasCloseAsteroid = true;
+                // Randomly brighten asteroids close to the planet
+                if (Math.random() < 0.3) {
+                  asteroidMesh.userData.asteroidBrightness[i] = 1;
+                }
+              } else {
+                // Fade out brightness for distant asteroids
+                asteroidMesh.userData.asteroidBrightness[i] *= 0.95;
+              }
+            }
+          }
+          
+          // Update material emissive based on proximity
+          if (hasCloseAsteroid) {
+            asteroidMesh.material.emissive.setHex(0xffaa44);
+            asteroidMesh.material.emissiveIntensity = 0.4;
+          } else {
+            asteroidMesh.material.emissive.setHex(0x111111);
+            asteroidMesh.material.emissiveIntensity = 0.1;
+          }
+        }
+      }
+
+      // Geocentric View Logic - keep observation planet at center
+      const observePlanetId = observeFromPlanetIdRef.current;
+      if (observePlanetId && bodyMeshes[observePlanetId] && solarSystemGroupRef.current) {
+        const observePlanetMesh = bodyMeshes[observePlanetId].mesh;
+        const worldPos = new THREE.Vector3();
+        observePlanetMesh.getWorldPosition(worldPos);
+        
+        // Apply negative offset to keep planet at origin
+        const offset = worldPos.clone().multiplyScalar(-1);
+        if (isRealisticScaleRef.current) {
+          solarSystemGroupRef.current.position.add(offset.multiplyScalar(0.05)); // Smooth transition
+        }
+      } else if (solarSystemGroupRef.current && isRealisticScaleRef.current) {
+        // Return to normal position when geocentric view is off
+        const targetPos = SOLAR_SYSTEM_POSITION.clone();
+        solarSystemGroupRef.current.position.lerp(targetPos, 0.05);
       }
 
       // Camera Flight interpolation
@@ -602,7 +689,12 @@ export default function CosmosCanvas({
             ? Math.max(0.2, bodyData.realRadius / 15000)
             : bodyData.visualRadius;
 
-          offsetDist = radius * 3.5 + 5;
+          // In geocentric view, position camera higher above the planet surface
+          if (observePlanetId === currentSelectedId && isRealisticScaleRef.current) {
+            offsetDist = radius * 8 + 15;  // Higher altitude view
+          } else {
+            offsetDist = radius * 3.5 + 5;
+          }
         }
 
         if (flightState.isAnimating) {
@@ -1384,15 +1476,21 @@ function createNebulaFilaments(scene) {
 }
 
 function createAsteroidBelts(scene, isRealisticScale) {
-  const count = 1500;
+  const count = 750;
   const geo = new THREE.DodecahedronGeometry(0.35, 1);
   const mat = new THREE.MeshStandardMaterial({
-    color: 0x998877,
-    roughness: 0.8
+    color: 0x555555,  // Dull gray
+    roughness: 0.95,
+    metalness: 0.1,
+    emissive: 0x111111  // Minimal glow
   });
 
   const instancedMesh = new THREE.InstancedMesh(geo, mat, count);
   const dummy = new THREE.Object3D();
+
+  // Store asteroid positions for distance calculations
+  const asteroidPositions = [];
+  const asteroidBrightness = new Array(count).fill(0);
 
   const minR = isRealisticScale ? 260 : 105;
   const maxR = isRealisticScale ? 310 : 125;
@@ -1402,7 +1500,14 @@ function createAsteroidBelts(scene, isRealisticScale) {
     const theta = Math.random() * Math.PI * 2;
     const y = (Math.random() - 0.5) * 6;
 
-    dummy.position.set(Math.cos(theta) * r, y, Math.sin(theta) * r);
+    const pos = new THREE.Vector3(
+      Math.cos(theta) * r,
+      y,
+      Math.sin(theta) * r
+    );
+    asteroidPositions.push(pos);
+
+    dummy.position.copy(pos);
     const scale = 0.5 + Math.random() * 1.5;
     dummy.scale.set(scale, scale, scale);
     dummy.rotation.set(Math.random() * Math.PI, Math.random() * Math.PI, Math.random() * Math.PI);
@@ -1412,6 +1517,8 @@ function createAsteroidBelts(scene, isRealisticScale) {
   }
 
   instancedMesh.instanceMatrix.needsUpdate = true;
+  instancedMesh.userData.asteroidPositions = asteroidPositions;
+  instancedMesh.userData.asteroidBrightness = asteroidBrightness;
   scene.add(instancedMesh);
   return instancedMesh;
 }

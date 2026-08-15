@@ -8,7 +8,9 @@ export default function HeaderHUD({
   isRealisticScale,
   onToggleScale,
   isAudioActive,
-  onToggleAudio
+  onToggleAudio,
+  observeFromPlanetId,
+  onSetObserveFromPlanet
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -215,6 +217,28 @@ export default function HeaderHUD({
         >
           <Eye style={{ width: '16px', height: '16px' }} />
           <span>{isRealisticScale ? 'Realistic Scale' : 'Visual Scale'}</span>
+        </button>
+
+        {/* Geocentric View Toggle */}
+        <button
+          onClick={() => onSetObserveFromPlanet(observeFromPlanetId ? null : selectedBodyId)}
+          className="glass-panel"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '8px 14px',
+            borderRadius: '12px',
+            fontSize: '12px',
+            fontWeight: 600,
+            cursor: 'pointer',
+            color: observeFromPlanetId ? '#fbbf24' : '#94a3b8',
+            borderColor: observeFromPlanetId ? 'rgba(251, 191, 36, 0.5)' : 'rgba(255,255,255,0.1)',
+            background: observeFromPlanetId ? 'rgba(251, 191, 36, 0.1)' : 'rgba(0,0,0,0.65)'
+          }}
+          title={observeFromPlanetId ? `Observing from ${selectedBodyId}. Click to switch to heliocentric view.` : 'Click to observe from selected planet'}
+        >
+          <span>🔭 {observeFromPlanetId ? 'Geocentric' : 'Heliocentric'}</span>
         </button>
       </div>
 

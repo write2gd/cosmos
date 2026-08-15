@@ -7,11 +7,13 @@ import { spaceAudio } from './audio/spaceSynth';
 
 export default function App() {
   const [selectedBodyId, setSelectedBodyId] = useState('earth');
+  const [infoBodyId, setInfoBodyId] = useState(null); // Separate state for info board
   const [isRealisticScale, setIsRealisticScale] = useState(false);
-  const [timeSpeed, setTimeSpeed] = useState(10);
+  const [timeSpeed, setTimeSpeed] = useState(1);
   const [isPaused, setIsPaused] = useState(false);
   const [showOrbits, setShowOrbits] = useState(true);
   const [isAudioActive, setIsAudioActive] = useState(false);
+  const [observeFromPlanetId, setObserveFromPlanetId] = useState(null);
 
   const handleSelectBody = useCallback((id) => {
     setSelectedBodyId(id);
@@ -35,10 +37,12 @@ export default function App() {
       <CosmosCanvas
         selectedBodyId={selectedBodyId}
         onSelectBody={handleSelectBody}
+        onClickBodyInScene={setInfoBodyId}
         isRealisticScale={isRealisticScale}
         timeSpeed={timeSpeed}
         isPaused={isPaused}
         showOrbits={showOrbits}
+        observeFromPlanetId={observeFromPlanetId}
       />
 
       {/* Top Header HUD */}
@@ -49,12 +53,14 @@ export default function App() {
         onToggleScale={() => setIsRealisticScale((prev) => !prev)}
         isAudioActive={isAudioActive}
         onToggleAudio={handleToggleAudio}
+        observeFromPlanetId={observeFromPlanetId}
+        onSetObserveFromPlanet={setObserveFromPlanetId}
       />
 
       {/* Side Planet Info Drawer */}
       <PlanetDrawer
-        selectedBodyId={selectedBodyId}
-        onClose={() => setSelectedBodyId(null)}
+        selectedBodyId={infoBodyId}
+        onClose={() => setInfoBodyId(null)}
         onSelectBody={handleSelectBody}
       />
 

@@ -122,12 +122,13 @@ export default function ControlBar({
           <FastForward style={{ width: '14px', height: '14px', color: '#22d3ee' }} />
           <input
             type="range"
-            min="1"
-            max="100"
+            min="0.1"
+            max="10"
+            step="0.1"
             value={timeSpeed}
             onChange={(e) => onChangeTimeSpeed(Number(e.target.value))}
             style={{
-              width: '90px',
+              width: '120px',
               cursor: 'pointer',
               accentColor: '#22d3ee'
             }}
