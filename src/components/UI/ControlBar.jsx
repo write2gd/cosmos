@@ -123,12 +123,12 @@ export default function ControlBar({
           <input
             type="range"
             min="0"
-            max="1000"
-            step="10"
+            max="10"
+            step="1"
             value={timeSpeed}
             onChange={(e) => onChangeTimeSpeed(Number(e.target.value))}
             style={{
-              width: '888px',
+              width: '1111px',
               cursor: 'pointer',
               accentColor: '#22d3ee'
             }}

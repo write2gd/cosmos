@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Search, Volume2, VolumeX, Eye, Sparkles, Compass, ChevronDown } from 'lucide-react';
+import { Volume2, VolumeX, Eye, Compass, ChevronDown, ZoomIn, ZoomOut } from 'lucide-react';
 import { CELESTIAL_BODIES } from '../../data/celestialData';
 
 export default function HeaderHUD({
@@ -10,7 +10,9 @@ export default function HeaderHUD({
   isAudioActive,
   onToggleAudio,
   observeFromPlanetId,
-  onSetObserveFromPlanet
+  onSetObserveFromPlanet,
+  onZoomIn,
+  onZoomOut
 }) {
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearchOpen, setIsSearchOpen] = useState(false);
@@ -31,6 +33,21 @@ export default function HeaderHUD({
     )
   ];
 
+  const zoomBtnBase = {
+    padding: '9px',
+    borderRadius: '10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    background: 'rgba(255,255,255,0.06)',
+    border: '1px solid rgba(255,255,255,0.12)',
+    color: 'rgba(255,255,255,0.7)',
+    transition: 'all 0.2s ease',
+    width: '36px',
+    height: '36px'
+  };
+
   return (
     <header style={{
       position: 'absolute',
@@ -39,7 +56,7 @@ export default function HeaderHUD({
       right: '16px',
       zIndex: 20,
       display: 'flex',
-      alignItems: 'center',
+      alignItems: 'flex-start',
       justifyContent: 'space-between',
       pointerEvents: 'none'
     }}>
@@ -153,7 +170,7 @@ export default function HeaderHUD({
               {['Star', 'Inner Planets', 'Outer Planets', 'Moons'].map((category) => {
                 const bodiesInCategory = CELESTIAL_BODIES.filter(b => b.category === category);
                 if (bodiesInCategory.length === 0) return null;
-                
+
                 const categoryIcons = {
                   'Star': '☀️',
                   'Inner Planets': '🪨',
@@ -242,9 +259,9 @@ export default function HeaderHUD({
         </button>
       </div>
 
-      {/* Audio Controls */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: '12px', pointerEvents: 'auto', position: 'relative' }}>
-        {/* Audio Toggle Button */}
+      {/* Right Controls Column: Audio + Zoom */}
+      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '8px', pointerEvents: 'auto' }}>
+        {/* Audio Toggle */}
         <button
           onClick={onToggleAudio}
           className="glass-panel"
@@ -253,12 +270,70 @@ export default function HeaderHUD({
             borderRadius: '12px',
             cursor: 'pointer',
             color: isAudioActive ? '#22d3ee' : 'rgba(255,255,255,0.5)',
-            borderColor: isAudioActive ? '#06b6d4' : 'rgba(255,255,255,0.1)'
+            borderColor: isAudioActive ? '#06b6d4' : 'rgba(255,255,255,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center'
           }}
           title={isAudioActive ? 'Mute Ambient Space Synth' : 'Play Cosmic Ambient Drone'}
         >
-          {isAudioActive ? <Volume2 style={{ width: '16px', height: '16px' }} /> : <VolumeX style={{ width: '16px', height: '16px' }} />}
+          {isAudioActive
+            ? <Volume2 style={{ width: '16px', height: '16px' }} />
+            : <VolumeX style={{ width: '16px', height: '16px' }} />}
         </button>
+
+        {/* Zoom In / Zoom Out */}
+        <div className="glass-panel" style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '0px',
+          padding: '4px',
+          borderRadius: '12px',
+          alignItems: 'center',
+          overflow: 'hidden'
+        }}>
+          <button
+            id="zoom-in-btn"
+            onClick={onZoomIn}
+            title="Zoom In"
+            style={zoomBtnBase}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(34,211,238,0.18)';
+              e.currentTarget.style.borderColor = 'rgba(34,211,238,0.45)';
+              e.currentTarget.style.color = '#22d3ee';
+              e.currentTarget.style.transform = 'scale(1.08)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+              e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <ZoomIn style={{ width: '15px', height: '15px' }} />
+          </button>
+          <div style={{ width: '22px', height: '1px', background: 'rgba(255,255,255,0.1)', margin: '2px 0' }} />
+          <button
+            id="zoom-out-btn"
+            onClick={onZoomOut}
+            title="Zoom Out"
+            style={zoomBtnBase}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(34,211,238,0.18)';
+              e.currentTarget.style.borderColor = 'rgba(34,211,238,0.45)';
+              e.currentTarget.style.color = '#22d3ee';
+              e.currentTarget.style.transform = 'scale(1.08)';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+              e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+              e.currentTarget.style.color = 'rgba(255,255,255,0.7)';
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+          >
+            <ZoomOut style={{ width: '15px', height: '15px' }} />
+          </button>
+        </div>
       </div>
     </header>
   );

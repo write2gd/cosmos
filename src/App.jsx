@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import CosmosCanvas from './components/CosmosCanvas';
 import HeaderHUD from './components/UI/HeaderHUD';
 import PlanetDrawer from './components/UI/PlanetDrawer';
@@ -14,6 +14,11 @@ export default function App() {
   const [showOrbits, setShowOrbits] = useState(true);
   const [isAudioActive, setIsAudioActive] = useState(false);
   const [observeFromPlanetId, setObserveFromPlanetId] = useState(null);
+
+  // Zoom controls — CosmosCanvas populates this ref with { zoomIn, zoomOut }
+  const zoomRef = useRef(null);
+  const handleZoomIn = useCallback(() => zoomRef.current?.zoomIn(), []);
+  const handleZoomOut = useCallback(() => zoomRef.current?.zoomOut(), []);
 
   const handleSelectBody = useCallback((id) => {
     setSelectedBodyId(id);
@@ -43,6 +48,7 @@ export default function App() {
         isPaused={isPaused}
         showOrbits={showOrbits}
         observeFromPlanetId={observeFromPlanetId}
+        zoomRef={zoomRef}
       />
 
       {/* Top Header HUD */}
@@ -55,6 +61,8 @@ export default function App() {
         onToggleAudio={handleToggleAudio}
         observeFromPlanetId={observeFromPlanetId}
         onSetObserveFromPlanet={setObserveFromPlanetId}
+        onZoomIn={handleZoomIn}
+        onZoomOut={handleZoomOut}
       />
 
       {/* Side Planet Info Drawer */}

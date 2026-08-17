@@ -144,7 +144,8 @@ export default function CosmosCanvas({
   timeSpeed,
   isPaused,
   showOrbits,
-  observeFromPlanetId
+  observeFromPlanetId,
+  zoomRef
 }) {
   const mountRef = useRef(null);
   const sceneRef = useRef(null);
@@ -153,6 +154,35 @@ export default function CosmosCanvas({
   const meshesRef = useRef({});
   const orbitsRef = useRef([]);
   const solarSystemGroupRef = useRef(null);
+
+  // Expose zoom controls to parent via zoomRef
+  useEffect(() => {
+    if (!zoomRef) return;
+    zoomRef.current = {
+      zoomIn: () => {
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        if (!camera || !controls) return;
+        // Move camera 25% closer to the orbit target each click
+        const dir = controls.target.clone().sub(camera.position).normalize();
+        const dist = camera.position.distanceTo(controls.target);
+        const step = Math.max(dist * 0.25, 1.2);
+        camera.position.addScaledVector(dir, step);
+        controls.update();
+      },
+      zoomOut: () => {
+        const camera = cameraRef.current;
+        const controls = controlsRef.current;
+        if (!camera || !controls) return;
+        // Move camera 35% farther from the orbit target each click
+        const dir = controls.target.clone().sub(camera.position).normalize();
+        const dist = camera.position.distanceTo(controls.target);
+        const step = Math.max(dist * 0.35, 1.2);
+        camera.position.addScaledVector(dir, -step);
+        controls.update();
+      }
+    };
+  }, [zoomRef]);
 
   const [hoverInfo, setHoverInfo] = useState(null);
   const deepSpaceInteractablesRef = useRef([]);
@@ -201,7 +231,7 @@ export default function CosmosCanvas({
 
   useEffect(() => {
     observeFromPlanetIdRef.current = observeFromPlanetId;
-    
+
     // Hide/show observation planet's mesh, but keep its moons visible
     const bodyMeshes = meshesRef.current;
     if (bodyMeshes) {
@@ -211,7 +241,7 @@ export default function CosmosCanvas({
           bodyMeshes[id].mesh.visible = true;
         }
       });
-      
+
       // Hide only the observation planet, keep its moons visible
       if (observeFromPlanetId && bodyMeshes[observeFromPlanetId]) {
         bodyMeshes[observeFromPlanetId].mesh.visible = false;
@@ -348,9 +378,14 @@ export default function CosmosCanvas({
       andromedaGroup.scale.setScalar(andromedaScale);
       andromedaGroup.position.copy(ANDROMEDA_CENTER).multiplyScalar(30);
     } else {
+      // Visual scale: galaxy disc stays at GALACTIC_CENTER, no extra scaling needed
+      galaxyGroup.position.copy(GALACTIC_CENTER);
       andromedaGroup.scale.setScalar(1.5);
       andromedaGroup.position.copy(ANDROMEDA_CENTER);
     }
+    // Reset galaxy rotation so disc starts clean on each scene rebuild
+    galaxyGroup.rotation.y = 0;
+    if (andromedaGroup) andromedaGroup.rotation.y = 0;
 
     // 6. BUILD CELESTIAL BODIES
     const bodyMeshes = {};
@@ -652,7 +687,7 @@ export default function CosmosCanvas({
     let clock = new THREE.Clock();
 
     // Galactic orbit speed: ~225 million years per orbit → very slow visual rotation
-    const GALACTIC_ORBIT_SPEED = 0.0004; // radians per second (completes one loop in ~4 hours real time)
+    const GALACTIC_ORBIT_SPEED = 0.004; // radians per second (completes one loop in ~4 hours real time)
 
     const animate = () => {
       animationFrameId = requestAnimationFrame(animate);
@@ -661,18 +696,27 @@ export default function CosmosCanvas({
       const currentSelectedId = selectedBodyIdRef.current;
       const flightState = flightStateRef.current;
 
-      // Slow majestic galaxy disc rotation (spin in place)
+      // Galaxy disc rotation — always a slow ambient spin PLUS a speed-scaled bonus.
+      // At 100x the bonus is 100 * 0.000008 = 0.0008 extra rad/s — clearly visible at speed.
+      const speedBoost = currentSpeed > 0 ? currentSpeed * 0.000008 : 0;
+      // const galaxyRotDelta = delta * (0.0015 + speedBoost);
+      const galaxyRotDelta = delta * (GALACTIC_ORBIT_SPEED + speedBoost * 0.1);
       if (galaxyGroup) {
-        galaxyGroup.rotation.y += delta * 0.0015;
+        galaxyGroup.rotation.y += galaxyRotDelta;
       }
       if (andromedaGroup) {
-        andromedaGroup.rotation.y += delta * 0.0012;
+        andromedaGroup.rotation.y += delta * (GALACTIC_ORBIT_SPEED + speedBoost * 0.8);
+      }
+      if (triangulumGroup) {
+        triangulumGroup.rotation.y += delta * (GALACTIC_ORBIT_SPEED + speedBoost * 1.8);
       }
 
-      // Solar system orbits the galactic center in BOTH visual and realistic modes
+
+      // Solar system galactic orbit — must rotate at the SAME rate as the galaxy disc
+      // so the solar system stays embedded inside the spiral arms as they turn.
       const galacticPivot = solarSystemGroupRef.current?.userData?.galacticOrbitPivot;
       if (galacticPivot) {
-        galacticPivot.rotation.y += delta * GALACTIC_ORBIT_SPEED;
+        galacticPivot.rotation.y += galaxyRotDelta;
       }
 
       // Rotate planets
@@ -694,24 +738,24 @@ export default function CosmosCanvas({
 
       if (asteroidMesh) {
         asteroidMesh.rotation.y += delta * 0.01 * (currentSpeed > 0 ? currentSpeed * 0.2 : 1);
-        
+
         // Update asteroid brightness based on proximity to selected body
         if (currentSelectedId && bodyMeshes[currentSelectedId]) {
           const selectedMesh = bodyMeshes[currentSelectedId].mesh;
           const selectedWorldPos = new THREE.Vector3();
           selectedMesh.getWorldPosition(selectedWorldPos);
-          
+
           const asteroidPositions = asteroidMesh.userData.asteroidPositions;
           const proximityRadius = 50;  // Distance for brightness effect
           let hasCloseAsteroid = false;
-          
+
           if (asteroidPositions) {
             for (let i = 0; i < asteroidPositions.length; i++) {
               const astroWorldPos = asteroidPositions[i].clone();
               if (solarSystemGroupRef.current) {
                 astroWorldPos.applyMatrix4(solarSystemGroupRef.current.matrixWorld);
               }
-              
+
               const distance = selectedWorldPos.distanceTo(astroWorldPos);
               if (distance < proximityRadius) {
                 hasCloseAsteroid = true;
@@ -725,7 +769,7 @@ export default function CosmosCanvas({
               }
             }
           }
-          
+
           // Update material emissive based on proximity
           if (hasCloseAsteroid) {
             asteroidMesh.material.emissive.setHex(0xffaa44);
@@ -743,7 +787,7 @@ export default function CosmosCanvas({
         const observePlanetMesh = bodyMeshes[observePlanetId].mesh;
         const worldPos = new THREE.Vector3();
         observePlanetMesh.getWorldPosition(worldPos);
-        
+
         // Apply negative offset to keep planet at origin (realistic mode only)
         const offset = worldPos.clone().multiplyScalar(-1);
         if (isRealisticScaleRef.current) {
@@ -815,13 +859,14 @@ export default function CosmosCanvas({
             flightState.isAnimating = false;
           }
         } else {
-          const camDir = camera.position.clone().sub(controls.target);
-          if (camDir.length() === 0) camDir.set(0, 4, 12);
-          camDir.normalize().multiplyScalar(offsetDist);
-          const desiredCamPos = targetWorldPos.clone().add(camDir);
-
+          // After the flight ends: only softly track the orbit TARGET (the point we orbit around).
+          // We do NOT force the camera position — that lets OrbitControls honour the user's zoom.
           controls.target.lerp(targetWorldPos, 0.04);
-          camera.position.lerp(desiredCamPos, 0.04);
+          // Sync camera distance to targetWorldPos so zoom buttons apply correctly.
+          // We only nudge camera.position radially to keep up with a moving target (planet orbit),
+          // without overriding the distance set by the user or the flight.
+          const toTarget = targetWorldPos.clone().sub(controls.target);
+          camera.position.add(toTarget.multiplyScalar(0.04));
         }
       }
 
@@ -1123,7 +1168,7 @@ function createMilkyWayGalaxy(scene) {
 function createAndromedaGalaxy(scene) {
   const galaxyGroup = new THREE.Group();
   galaxyGroup.position.copy(ANDROMEDA_CENTER);
-  
+
   // Realistically tilted and slanted disk relative to observer
   galaxyGroup.rotation.x = -Math.PI * 0.22;
   galaxyGroup.rotation.z = Math.PI * 0.08;
@@ -1171,7 +1216,7 @@ function createAndromedaGalaxy(scene) {
     const r = Math.pow(Math.random(), 2.0) * 80;
     const theta = Math.random() * Math.PI * 2;
     const phi = Math.acos(2 * Math.random() - 1);
-    
+
     p1StarsPos[i * 3] = p1Center.x + r * Math.sin(phi) * Math.cos(theta);
     p1StarsPos[i * 3 + 1] = p1Center.y + r * Math.sin(phi) * Math.sin(theta);
     p1StarsPos[i * 3 + 2] = p1Center.z + r * Math.cos(phi);
@@ -1223,14 +1268,14 @@ function createAndromedaGalaxy(scene) {
       // Continuous Logarithmic arms spanning from 200 to 2000 units (much bigger)
       const armIdx = i % arms;
       const armAngle = (armIdx * Math.PI * 2) / arms;
-      
+
       // Bias t to create higher inner density (density gradient)
       const t = Math.pow(Math.random(), 1.25) * Math.PI * 6.2;  // extended range
       const baseR = a * Math.exp(b * t);
       let armSpread = 100 + baseR * 0.25;  // wider arm spread
-      
+
       let targetR = baseR + (Math.random() - 0.5) * armSpread;
-      
+
       // Ring of Fire density enhancement around 1500 to 1900 units (outer arm)
       if (targetR > 1400 && targetR < 2000 && Math.random() < 0.45) {
         targetR = 1650 + (targetR - 1650) * 0.35; // compress towards ring core
